@@ -1,0 +1,6 @@
+# Ignore local embeddings and vector database files
+app/embeddings/
+
+# Ignore Python bytecode
+**/__pycache__/
+*.pyc
