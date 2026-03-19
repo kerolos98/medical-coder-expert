@@ -13,7 +13,7 @@ app = FastAPI(title="Medical Code Prediction API")
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
-download_weights(is_folder=True)  # Ensure weights are downloaded at startup
+download_weights()  # Ensure weights are downloaded at startup
 # -------------------------
 # Request schema
 # -------------------------
