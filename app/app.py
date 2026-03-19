@@ -5,7 +5,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
 from code_recommender import SemanticCodeRetrieval, Model_Data
-
+from download_weights import download_weights
 # -------------------------
 # FastAPI & SlowAPI setup
 # -------------------------
@@ -13,7 +13,7 @@ app = FastAPI(title="Medical Code Prediction API")
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
-
+download_weights(is_folder=True)  # Ensure weights are downloaded at startup
 # -------------------------
 # Request schema
 # -------------------------
