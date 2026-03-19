@@ -99,3 +99,7 @@ async def predict(request: Request, payload: PredictRequest):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+@app.get("/")
+async def root():
+    return {"message": "Medical Code Prediction API running"}
