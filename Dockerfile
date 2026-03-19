@@ -49,10 +49,8 @@ WORKDIR /app
 
 
 
-# Add configuration files, app files, and version information
-ADD config /config
+
 ADD app /app
-ADD VERSION.json /app/VERSION.json
 
 # Set environment variables
 ENV LC_ALL=C.UTF-8
