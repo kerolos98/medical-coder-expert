@@ -5,15 +5,8 @@ matplotlib
 seaborn==0.12.1
 scikit-learn > 1.5.0
 openpyxl
-boto3
 rapidfuzz
 cryptography > 44.0.1
-Flask
-gunicorn
-watchtower
-statsd
-pandas
-xlsxwriter
 rouge_score
 # For CPU-only PyTorch installation
 --extra-index-url https://download.pytorch.org/whl/cpu
