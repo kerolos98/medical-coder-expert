@@ -25,6 +25,6 @@ jobs:
           git config --global user.email "github-actions@github.com"
           git config --global user.name "github-actions"
       
-          git remote add hf https://user:$HF_TOKEN@huggingface.co/spaces//kerolos98/medical-coder-expert
+          git remote add hf https://user:$HF_TOKEN@huggingface.co/spaces/kerolos98/medical-coder-expert
       
           git push hf main --force
