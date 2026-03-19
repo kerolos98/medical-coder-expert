@@ -19,3 +19,7 @@ rouge_score
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.9.1+cpu
 gdown
+uvicorn
+fastapi
+pydantic
+slowapi
