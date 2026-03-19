@@ -17,3 +17,4 @@ fastapi==0.135.1
 pydantic==2.12.5
 slowapi==0.1.9
 faiss-cpu>=1.9.0
+h5py==3.12.1
