@@ -1,6 +1,6 @@
 import os
 BASE_PATH = os.path.dirname(os.path.realpath(__file__))
-FOLDER_NAME = "embeddings"
+FOLDER_NAME = "/data/embeddings"
 FOLDER_PATH = os.path.join(BASE_PATH, FOLDER_NAME)
 
 EMBEDDINGS_MODEL = f"{FOLDER_PATH}/sapbert"
