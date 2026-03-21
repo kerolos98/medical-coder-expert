@@ -1,11 +1,7 @@
 import os
 
-BASE_PATH = os.path.dirname(os.path.realpath(__file__))
-
-FOLDER_NAME = "data/embeddings" 
-FOLDER_PATH = os.path.join(BASE_PATH, FOLDER_NAME)
-
-# Ensure directory exists
+# Use the repo folder directly (works like your old setup)
+FOLDER_PATH = "/app/data/embeddings"  # where sapbert actually is
 os.makedirs(FOLDER_PATH, exist_ok=True)
 
 EMBEDDINGS_MODEL = f"{FOLDER_PATH}/sapbert"
@@ -16,4 +12,4 @@ ICD10_PCA = f"{FOLDER_PATH}/pca_768_to_256_diag.json"
 RX_EMBEDDINGS = f"{FOLDER_PATH}/sapbert_rx_embeddings_95var.h5"
 RX_PCA = f"{FOLDER_PATH}/pca_768_to_95var_rx.json"
 
-API_KEYS_DB_PATH = os.path.join(FOLDER_PATH, "api_keys.db")  
+API_KEYS_DB_PATH = os.path.join(FOLDER_PATH, "api_keys.db")
