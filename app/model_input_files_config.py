@@ -1,8 +1,6 @@
 import os
 
-# Use the repo folder directly (works like your old setup)
-FOLDER_PATH = "/data/embeddings"  # where sapbert actually is
-os.makedirs(FOLDER_PATH, exist_ok=True)
+FOLDER_PATH = "/data/embeddings" 
 
 EMBEDDINGS_MODEL = f"{FOLDER_PATH}/sapbert"
 SNOMED_EMBEDDINGS = f"{FOLDER_PATH}/sapbert_snomed_embeddings.h5"
