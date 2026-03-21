@@ -11,7 +11,7 @@ from database_manager import APIKeys
 # -------------------------
 # FastAPI & SlowAPI setup
 # -------------------------
-api_keys_manager = APIKeys()
+
 app = FastAPI(title="Medical Code Prediction API")
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
@@ -25,6 +25,7 @@ app.add_middleware(
 )
 
 download_weights()  # Ensure weights are downloaded at startup
+api_keys_manager = APIKeys()
 # -------------------------
 # Request schema
 # -------------------------
