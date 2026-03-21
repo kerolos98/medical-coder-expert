@@ -125,7 +125,7 @@ def predict_model(text: str, base_model: SemanticCodeRetrieval, core_model: Sema
 # API endpoint
 # -------------------------
 @app.post("/predict")
-@limiter.limit(user_rate_limit)
+@limiter.limit(limit_value=user_rate_limit)
 async def predict(
     request: Request,
     payload: PredictRequest, 
