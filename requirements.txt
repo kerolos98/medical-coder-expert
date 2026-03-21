@@ -19,3 +19,4 @@ slowapi==0.1.9
 faiss-cpu>=1.9.0
 h5py==3.12.1
 transformers==4.41.2
+pydrive2
