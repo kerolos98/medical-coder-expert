@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastapi.concurrency import run_in_threadpool
@@ -7,9 +7,11 @@ from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
 from code_recommender import SemanticCodeRetrieval, Model_Data
 from download_weights import download_weights
+from database_manager import APIKeys  
 # -------------------------
 # FastAPI & SlowAPI setup
 # -------------------------
+api_keys_manager = APIKeys()
 app = FastAPI(title="Medical Code Prediction API")
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
@@ -35,6 +37,29 @@ class PredictRequest(BaseModel):
 # -------------------------
 core = icd10_model = snomed_model = rx_model = None
 models = {}
+async def validate_api_key(x_api_key: str = Header(None)):
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="API key missing")
+    
+    is_valid, msg = api_keys_manager.check_key_validity(x_api_key)
+    if not is_valid:
+        raise HTTPException(status_code=403, detail=msg)
+    
+    # Increment usage
+    key_info = api_keys_manager.get_key_info(x_api_key)
+    current_requests = key_info[4]  # requests_made column
+    api_keys_manager.update_requests_made(x_api_key, current_requests + 1)
+    
+    return x_api_key 
+
+def user_rate_limit(request: Request):
+    api_key = request.headers.get("x-api-key")
+    if not api_key:
+        return "0/minute"  # block requests without key
+    limit = api_keys_manager.get_rate_limit(api_key)
+    if not limit:
+        return "0/minute"
+    return f"{limit}/minute"  # e.g., "15/minute"
 
 # -------------------------
 # Load models at startup
@@ -88,26 +113,56 @@ def predict_model(text: str, base_model: SemanticCodeRetrieval, core_model: Sema
 # API endpoint
 # -------------------------
 @app.post("/predict")
-@limiter.limit("20/minute")  # Limit 20 requests/min per IP
-async def predict(request: Request, payload: PredictRequest):
-    model_type = payload.model_type.lower()
-    
-    if model_type not in models:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Unknown model_type '{payload.model_type}'. Choose from: {list(models.keys())}"
-        )
-    
-    base_model = models[model_type]
-    result = await run_in_threadpool(predict_model, payload.text, base_model, core)
-    return {"model_type": model_type, "prediction": result}
+@limiter.limit(user_rate_limit)  # dynamic per-user rate
+async def predict(payload: PredictRequest, api_key: str = Depends(validate_api_key)):
+    try:
+        model_type = payload.model_type.lower()
 
+        if model_type not in models:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown model_type '{payload.model_type}'. Choose from: {list(models.keys())}"
+            )
+
+        base_model = models[model_type]
+        # Run prediction in threadpool
+        result = await run_in_threadpool(predict_model, payload.text, base_model, core)
+
+        # If we reached here, the request is successful
+        api_keys_manager.add_single_request(api_key)  # Log usage
+
+        return {"model_type": model_type, "prediction": result}
+
+    except HTTPException:
+        # Do not increment usage if request failed
+        raise
+
+    except Exception as e:
+        # Optionally log the error for debugging
+        print(f"Error during prediction: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 # -------------------------
 # Health check endpoint
 # -------------------------
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+@app.get("/usage")
+async def usage(api_key: str = Depends(validate_api_key)):
+    key_info = api_keys_manager.get_key_info(api_key)
+    if not key_info:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    _, _, owner_name, usage_limit, requests_made, last_used, created_at, expires_at = key_info
+    return {
+        "owner_name": owner_name,
+        "usage_limit": usage_limit,
+        "requests_made": requests_made,
+        "last_used": last_used,
+        "created_at": created_at,
+        "expires_at": expires_at
+    }
 
 @app.get("/")
 async def root():
