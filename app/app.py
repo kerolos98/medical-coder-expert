@@ -64,7 +64,7 @@ async def validate_api_key(
 
     return x_api_key
 
-def user_rate_limit(request: Request):
+def user_rate_limit(request: Request, with_request=True):
     api_key = request.headers.get("x-api-key")
     if not api_key:
         return "0/minute"  # block requests without key
