@@ -64,14 +64,19 @@ async def validate_api_key(
 
     return x_api_key
 
-def user_rate_limit(request: Request):
-    api_key = request.headers.get("x-api-key")
+def user_rate_limit(api_key):
     if not api_key:
         return "0/minute"  # block requests without key
     limit = api_keys_manager.get_rate_limit(api_key)
     if not limit:
         return "0/minute"
-    return f"{limit}/minute"  # e.g., "15/minute"
+    return f"{limit}/minute"  
+
+def dynamic_key_and_limit(request: Request):
+    api_key = request.headers.get("x-api-key")
+    limit_val = api_keys_manager.get_rate_limit(api_key) if api_key else 0
+    request.state.dynamic_limit = f"{limit_val}/minute"
+    return api_key or get_remote_address(request)
 
 # -------------------------
 # Load models at startup
@@ -124,8 +129,10 @@ def predict_model(text: str, base_model: SemanticCodeRetrieval, core_model: Sema
 # -------------------------
 # API endpoint
 # -------------------------
-@app.post("/predict")
-@limiter.limit(limit_value=user_rate_limit)
+@limiter.limit(
+    lambda r: r.state.dynamic_limit,
+    key_func=dynamic_key_and_limit
+)
 async def predict(
     request: Request,
     payload: PredictRequest, 
