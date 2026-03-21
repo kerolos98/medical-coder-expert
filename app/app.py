@@ -132,8 +132,8 @@ async def predict(
     base_model = models[model_type]
     result = await run_in_threadpool(predict_model, payload.text, base_model, core)
 
-    api_keys_manager.add_single_request(api_key)  # only after success
-
+    api_keys_manager.add_single_request(api_key)  
+    api_keys_manager.update_requests_made(api_key, api_keys_manager.get_key_info(api_key)[4] + 1)
     return {"model_type": model_type, "prediction": result}
 # -------------------------
 # Health check endpoint
