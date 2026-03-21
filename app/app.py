@@ -64,7 +64,7 @@ async def validate_api_key(
 
     return x_api_key
 
-def user_rate_limit(request: Request, with_request=True):
+def user_rate_limit(request: Request):
     api_key = request.headers.get("x-api-key")
     if not api_key:
         return "0/minute"  # block requests without key
@@ -125,7 +125,7 @@ def predict_model(text: str, base_model: SemanticCodeRetrieval, core_model: Sema
 # API endpoint
 # -------------------------
 @app.post("/predict")
-@limiter.limit(lambda request: user_rate_limit(request))
+@limiter.limit(lambda request: user_rate_limit(request),  with_request=True)
 async def predict(
     request: Request,
     payload: PredictRequest, 
