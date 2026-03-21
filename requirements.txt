@@ -6,7 +6,6 @@ seaborn==0.12.1
 scikit-learn > 1.5.0
 openpyxl
 rapidfuzz
-cryptography > 44.0.1
 rouge_score
 # For CPU-only PyTorch installation
 --extra-index-url https://download.pytorch.org/whl/cpu
@@ -20,4 +19,5 @@ faiss-cpu>=1.9.0
 h5py==3.12.1
 transformers==4.41.2
 pydrive2
-pyOpenSSL
+pyopenssl==23.2.0
+cryptography>=41.0.0
