@@ -1,3 +1,5 @@
+import threading
+import time
 from fastapi import FastAPI, Request, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -7,7 +9,7 @@ from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
 from code_recommender import SemanticCodeRetrieval, Model_Data
 from download_weights import download_weights
-from database_manager import APIKeys  
+from database_manager import APIKeys, upload_db_to_drive
 # -------------------------
 # FastAPI & SlowAPI setup
 # -------------------------
@@ -26,6 +28,14 @@ app.add_middleware(
 
 download_weights()  # Ensure weights are downloaded at startup
 api_keys_manager = APIKeys()
+def periodic_upload():
+    while True:
+        time.sleep(60)  # every 60 seconds
+        try:
+            upload_db_to_drive()
+        except Exception as e:
+            print(f"Upload failed: {e}")
+threading.Thread(target=periodic_upload, daemon=True).start()
 # -------------------------
 # Request schema
 # -------------------------
@@ -115,9 +125,8 @@ def predict_model(text: str, base_model: SemanticCodeRetrieval, core_model: Sema
 # API endpoint
 # -------------------------
 @app.post("/predict")
-@limiter.limit(user_rate_limit)
+@limiter.limit(lambda request: user_rate_limit(request))
 async def predict(
-    request: Request,  
     payload: PredictRequest, 
     api_key: str = Depends(validate_api_key)
 ):
@@ -133,7 +142,7 @@ async def predict(
     result = await run_in_threadpool(predict_model, payload.text, base_model, core)
 
     api_keys_manager.add_single_request(api_key)  
-    api_keys_manager.update_requests_made(api_key, api_keys_manager.get_key_info(api_key)[4] + 1)
+    api_keys_manager.increment_requests(api_key)
     return {"model_type": model_type, "prediction": result}
 # -------------------------
 # Health check endpoint
