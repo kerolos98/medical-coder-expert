@@ -7,9 +7,11 @@ from fastapi.concurrency import run_in_threadpool
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
+from slowapi.errors import RateLimitExceeded
 from code_recommender import SemanticCodeRetrieval, Model_Data
 from download_weights import download_weights
-from database_manager import APIKeys, upload_db_to_drive
+from database_manager import APIKeys, upload_file_to_drive, get_drive_service
+from limiter import RateLimiter
 # -------------------------
 # FastAPI & SlowAPI setup
 # -------------------------
@@ -28,14 +30,21 @@ app.add_middleware(
 
 download_weights()  # Ensure weights are downloaded at startup
 api_keys_manager = APIKeys()
+
+
 def periodic_upload():
     while True:
-        time.sleep(60)  # every 60 seconds
+        time.sleep(240)
         try:
-            upload_db_to_drive()
+            # Pass the authorized instance to the function
+            upload_file_to_drive()
         except Exception as e:
-            print(f"Upload failed: {e}")
+            print(f"Thread Error: {e}")
+
+
 threading.Thread(target=periodic_upload, daemon=True).start()
+
+
 # -------------------------
 # Request schema
 # -------------------------
@@ -43,18 +52,18 @@ class PredictRequest(BaseModel):
     text: str
     model_type: str  # "icd10", "snomed", or "rx"
 
+
 # -------------------------
 # Placeholders for models
 # -------------------------
 core = icd10_model = snomed_model = rx_model = None
 models = {}
-async def validate_api_key(
-    request: Request, 
-    x_api_key: str = Header(None)
-):
+
+
+async def validate_api_key(request: Request, x_api_key: str = Header(None)):
     if not x_api_key:
         raise HTTPException(status_code=401, detail="API key missing")
-    
+
     is_valid, msg = api_keys_manager.check_key_validity(x_api_key)
     if not is_valid:
         raise HTTPException(status_code=403, detail=msg)
@@ -64,19 +73,13 @@ async def validate_api_key(
 
     return x_api_key
 
-def user_rate_limit(api_key):
-    if not api_key:
-        return "0/minute"  # block requests without key
-    limit = api_keys_manager.get_rate_limit(api_key)
-    if not limit:
-        return "0/minute"
-    return f"{limit}/minute"  
 
-def dynamic_key_and_limit(request: Request):
+def get_api_key_from_request(request: Request):
+    """Extract API key - this identifies WHO is making the request"""
     api_key = request.headers.get("x-api-key")
-    limit_val = api_keys_manager.get_rate_limit(api_key) if api_key else 0
-    request.state.dynamic_limit = f"{limit_val}/minute"
-    return api_key or get_remote_address(request)
+    if not api_key:
+        return "anonymous"
+    return api_key
 
 # -------------------------
 # Load models at startup
@@ -91,67 +94,76 @@ async def load_models():
 
     # ICD10 model
     icd10_model = SemanticCodeRetrieval(
-        embeddings_path=Model_Data.ICD10_EMBEDDINGS, 
-        pca_json_path=Model_Data.ICD10_PCA
+        embeddings_path=Model_Data.ICD10_EMBEDDINGS, pca_json_path=Model_Data.ICD10_PCA
     )
     icd10_model.load_embedding_model_and_embeddings()
 
     # SNOMED model
     snomed_model = SemanticCodeRetrieval(
-        embeddings_path=Model_Data.SNOMED_EMBEDDINGS, 
-        pca_json_path=Model_Data.SNOMED_PCA
+        embeddings_path=Model_Data.SNOMED_EMBEDDINGS,
+        pca_json_path=Model_Data.SNOMED_PCA,
     )
     snomed_model.load_embedding_model_and_embeddings()
 
     # RX model
     rx_model = SemanticCodeRetrieval(
-        embeddings_path=Model_Data.RX_EMBEDDINGS, 
-        pca_json_path=Model_Data.RX_PCA
+        embeddings_path=Model_Data.RX_EMBEDDINGS, pca_json_path=Model_Data.RX_PCA
     )
     rx_model.load_embedding_model_and_embeddings()
 
     # Map model_type strings to instances
-    models = {
-        "icd10": icd10_model,
-        "snomed": snomed_model,
-        "rx": rx_model
-    }
+    models = {"icd10": icd10_model, "snomed": snomed_model, "rx": rx_model}
+
 
 # -------------------------
 # Prediction function
 # -------------------------
-def predict_model(text: str, base_model: SemanticCodeRetrieval, core_model: SemanticCodeRetrieval):
+def predict_model(
+    text: str, base_model: SemanticCodeRetrieval, core_model: SemanticCodeRetrieval
+):
     # Use core embedding model for consistency
     base_model.embedding_model = core_model.embedding_model
     base_model.tokenizer = core_model.tokenizer
     return base_model.get_code_recommendation(text)
 
+
 # -------------------------
 # API endpoint
 # -------------------------
-@limiter.limit(
-    lambda r: r.state.dynamic_limit,
-    key_func=dynamic_key_and_limit
-)
+custom_limiter = RateLimiter()
+@app.post("/predict")
 async def predict(
-    request: Request,
+    request: Request, 
     payload: PredictRequest, 
     api_key: str = Depends(validate_api_key)
 ):
-    model_type = payload.model_type.lower()
+    # Get the user's rate limit
+    user_limit = api_keys_manager.get_rate_limit(api_key)
     
+    if not user_limit:
+        raise HTTPException(status_code=403, detail="No rate limit configured for this API key")
+    
+    # Check rate limit - this maintains separate counters per api_key
+    custom_limiter.check_limit(api_key, user_limit, window_seconds=60)
+    
+    # Process the request
+    model_type = payload.model_type.lower()
+
     if model_type not in models:
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown model_type '{payload.model_type}'. Choose from: {list(models.keys())}"
+            detail=f"Unknown model_type '{payload.model_type}'. Choose from: {list(models.keys())}",
         )
-    
+
     base_model = models[model_type]
     result = await run_in_threadpool(predict_model, payload.text, base_model, core)
 
-    api_keys_manager.add_single_request(api_key)  
+    api_keys_manager.add_single_request(api_key)
     api_keys_manager.increment_requests(api_key)
+    
     return {"model_type": model_type, "prediction": result}
+
+
 # -------------------------
 # Health check endpoint
 # -------------------------
@@ -159,21 +171,26 @@ async def predict(
 async def health():
     return {"status": "ok"}
 
+
 @app.get("/usage")
-async def usage(api_key: str = Depends(validate_api_key)):
+@limiter.limit("5/minute")  
+async def usage(request: Request, api_key: str = Depends(validate_api_key)):
     key_info = api_keys_manager.get_key_info(api_key)
     if not key_info:
         raise HTTPException(status_code=404, detail="API key not found")
-    
-    _, _, owner_name, usage_limit, requests_made, last_used, created_at, expires_at = key_info
+
+    _, _, owner_name, usage_limit, requests_made, last_used, created_at, expires_at = (
+        key_info
+    )
     return {
         "owner_name": owner_name,
         "usage_limit": usage_limit,
         "requests_made": requests_made,
         "last_used": last_used,
         "created_at": created_at,
-        "expires_at": expires_at
+        "expires_at": expires_at,
     }
+
 
 @app.get("/")
 async def root():
