@@ -1,6 +1,6 @@
 import threading
 import time
-from typing import Optional
+from typing import Optional, Union, List
 from fastapi import FastAPI, Request, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -51,7 +51,7 @@ threading.Thread(target=periodic_upload, daemon=True).start()
 # Request schema
 # -------------------------
 class PredictRequest(BaseModel):
-    text: Optional[str, list]  # Accept either a single string or a list of strings
+    text: Union[str, List[str]]  # Accept either a single string or a list of strings
     model_type: str  # "icd10", "snomed", or "rx"
 
 
@@ -122,12 +122,15 @@ async def load_models():
 # Prediction function
 # -------------------------
 def predict_model(
-    text: str, base_model: SemanticCodeRetrieval, core_model: SemanticCodeRetrieval
+    text: Union[str, List[str]], base_model: SemanticCodeRetrieval, core_model: SemanticCodeRetrieval
 ):
     # Use core embedding model for consistency
     base_model.embedding_model = core_model.embedding_model
     base_model.tokenizer = core_model.tokenizer
-    return base_model.get_code_recommendation(text)
+    if isinstance(text, list):
+        return [base_model.get_code_recommendation(t) for t in text]
+    else:
+        return base_model.get_code_recommendation(text)
 
 
 # -------------------------
