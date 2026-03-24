@@ -190,7 +190,7 @@ async def usage(request: Request, api_key: str = Depends(validate_api_key)):
     if not key_info:
         raise HTTPException(status_code=404, detail="API key not found")
 
-    _, _, owner_name, usage_limit, requests_made, last_used, created_at, expires_at = (
+    _, key, owner_name, usage_limit, requests_made, created_at, expires_at = (
         key_info
     )
     return {
