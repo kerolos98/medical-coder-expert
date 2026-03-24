@@ -197,7 +197,6 @@ async def usage(request: Request, api_key: str = Depends(validate_api_key)):
         "owner_name": owner_name,
         "usage_limit": usage_limit,
         "requests_made": requests_made,
-        "last_used": last_used,
         "created_at": created_at,
         "expires_at": expires_at,
     }
