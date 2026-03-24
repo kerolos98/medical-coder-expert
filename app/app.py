@@ -168,7 +168,7 @@ async def predict(
     if isinstance(result, Exception):
         raise HTTPException(status_code=500, detail=str(result))
     if isinstance(payload.text, list):
-        api_keys_manager.add_bulk_requests(api_key, len(payload.text))
+        api_keys_manager.add_batch_requests(api_key, len(payload.text))
     else:
         api_keys_manager.add_single_request(api_key)
     api_keys_manager.increment_requests(api_key)
