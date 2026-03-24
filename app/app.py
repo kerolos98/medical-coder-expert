@@ -1,5 +1,6 @@
 import threading
 import time
+from typing import Optional
 from fastapi import FastAPI, Request, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ from code_recommender import SemanticCodeRetrieval, Model_Data
 from download_weights import download_weights
 from database_manager import APIKeys, upload_file_to_drive, get_drive_service
 from limiter import RateLimiter
+
 # -------------------------
 # FastAPI & SlowAPI setup
 # -------------------------
@@ -49,7 +51,7 @@ threading.Thread(target=periodic_upload, daemon=True).start()
 # Request schema
 # -------------------------
 class PredictRequest(BaseModel):
-    text: str
+    text: Optional[str, list]  # Accept either a single string or a list of strings
     model_type: str  # "icd10", "snomed", or "rx"
 
 
@@ -80,6 +82,7 @@ def get_api_key_from_request(request: Request):
     if not api_key:
         return "anonymous"
     return api_key
+
 
 # -------------------------
 # Load models at startup
@@ -131,21 +134,23 @@ def predict_model(
 # API endpoint
 # -------------------------
 custom_limiter = RateLimiter()
+
+
 @app.post("/predict")
 async def predict(
-    request: Request, 
-    payload: PredictRequest, 
-    api_key: str = Depends(validate_api_key)
+    request: Request, payload: PredictRequest, api_key: str = Depends(validate_api_key)
 ):
     # Get the user's rate limit
     user_limit = api_keys_manager.get_rate_limit(api_key)
-    
+
     if not user_limit:
-        raise HTTPException(status_code=403, detail="No rate limit configured for this API key")
-    
+        raise HTTPException(
+            status_code=403, detail="No rate limit configured for this API key"
+        )
+
     # Check rate limit - this maintains separate counters per api_key
     custom_limiter.check_limit(api_key, user_limit, window_seconds=60)
-    
+
     # Process the request
     model_type = payload.model_type.lower()
 
@@ -157,10 +162,13 @@ async def predict(
 
     base_model = models[model_type]
     result = await run_in_threadpool(predict_model, payload.text, base_model, core)
-
-    api_keys_manager.add_single_request(api_key)
+    if isinstance(result, Exception):
+        raise HTTPException(status_code=500, detail=str(result))
+    if isinstance(payload.text, list):
+        api_keys_manager.add_bulk_requests(api_key, len(payload.text))
+    else:
+        api_keys_manager.add_single_request(api_key)
     api_keys_manager.increment_requests(api_key)
-    
     return {"model_type": model_type, "prediction": result}
 
 
@@ -173,7 +181,7 @@ async def health():
 
 
 @app.get("/usage")
-@limiter.limit("5/minute")  
+@limiter.limit("5/minute")
 async def usage(request: Request, api_key: str = Depends(validate_api_key)):
     key_info = api_keys_manager.get_key_info(api_key)
     if not key_info:
