@@ -9,7 +9,7 @@ def download_weights():
         subprocess.run([
         "gdown",
         "--folder",
-        "URL",
+        DRIVE_URL,
         "-O",
         WEIGHTS_PATH
     ])
